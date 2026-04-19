@@ -23,6 +23,7 @@ export function LoginModal({
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState("");
   const [pairExpiresAt, setPairExpiresAt] = useState("");
   const pollingRef = useRef<number | null>(null);
@@ -58,8 +59,13 @@ export function LoginModal({
         onToast("请输入正确邮箱");
         return;
       }
+      if (cooldown > 0) {
+        onToast(`请稍后再试（${cooldown}s）`);
+        return;
+      }
 
       setBusy(true);
+      setInlineError(null);
       try {
         const emailRedirectTo = getAuthRedirectTo(new URL(window.location.href), "/pair");
         const { error } = await supabase.auth.signInWithOtp({
@@ -70,9 +76,14 @@ export function LoginModal({
           throw error;
         }
         setStep("email");
+        setCooldown(60);
         onToast("登录链接已发送到邮箱");
       } catch (e) {
         const message = e instanceof Error ? e.message : "发送失败";
+        setInlineError(message);
+        if (message.toLowerCase().includes("rate limit")) {
+          setCooldown(60);
+        }
         onToast(message);
       } finally {
         setBusy(false);
@@ -84,8 +95,13 @@ export function LoginModal({
       onToast("请输入正确手机号");
       return;
     }
+    if (cooldown > 0) {
+      onToast(`请稍后再试（${cooldown}s）`);
+      return;
+    }
 
     setBusy(true);
+    setInlineError(null);
     try {
       const { error } = await supabase.auth.signInWithOtp({ phone });
       if (error) {
@@ -96,6 +112,7 @@ export function LoginModal({
       onToast("验证码已发送");
     } catch (e) {
       const message = e instanceof Error ? e.message : "发送失败";
+      setInlineError(message);
       onToast(message);
     } finally {
       setBusy(false);
@@ -437,7 +454,7 @@ export function LoginModal({
               <button
                 type="button"
                 onClick={sendOtp}
-                disabled={busy}
+                disabled={busy || cooldown > 0}
                 style={{
                   height: 46,
                   borderRadius: 14,
@@ -448,8 +465,11 @@ export function LoginModal({
                   cursor: "pointer",
                 }}
               >
-                发送登录链接
+                {busy ? "发送中…" : cooldown > 0 ? `稍后再试（${cooldown}s）` : "发送登录链接"}
               </button>
+              {inlineError ? (
+                <div style={{ fontSize: 12, color: "rgba(255, 186, 186, 0.92)" }}>{inlineError}</div>
+              ) : null}
             </div>
           )
         ) : step === "phone" ? (
@@ -475,7 +495,7 @@ export function LoginModal({
             <button
               type="button"
               onClick={sendOtp}
-              disabled={busy}
+              disabled={busy || cooldown > 0}
               style={{
                 height: 46,
                 borderRadius: 14,
@@ -486,8 +506,11 @@ export function LoginModal({
                 cursor: "pointer",
               }}
             >
-              获取验证码
+              {busy ? "发送中…" : cooldown > 0 ? `稍后再试（${cooldown}s）` : "获取验证码"}
             </button>
+            {inlineError ? (
+              <div style={{ fontSize: 12, color: "rgba(255, 186, 186, 0.92)" }}>{inlineError}</div>
+            ) : null}
           </div>
         ) : (
           <div style={{ marginTop: 14, display: "grid", gap: 12 }}>

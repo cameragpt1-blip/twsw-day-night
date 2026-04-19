@@ -21,7 +21,7 @@ export function useToast() {
     (message: string) => {
       const id = createToastId();
       setItems((prev) => [...prev, { id, message }]);
-      window.setTimeout(() => remove(id), 2600);
+      window.setTimeout(() => remove(id), 6500);
     },
     [remove],
   );
