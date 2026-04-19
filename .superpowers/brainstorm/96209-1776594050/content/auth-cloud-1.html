@@ -1,0 +1,114 @@
+<h2>手机登录 + 云端 Todo（给朋友用）</h2>
+<p class="subtitle">目标：账户隔离（不同手机号看到自己的清单）+ 云端存储（更安全/可跨设备）+ 仍然保持前端体验接近现在。</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">交互形态（前端）</div>
+    <div class="mockup-body">
+      <div class="cards">
+        <div class="card" style="cursor:default">
+          <div class="card-body">
+            <h3>入口 A：进入即要求登录</h3>
+            <p>未登录只显示登录面板。登录后进入 Todo。最简单、数据隔离最清晰。</p>
+          </div>
+        </div>
+        <div class="card" style="cursor:default">
+          <div class="card-body">
+            <h3>入口 B：可浏览 / 但编辑需要登录</h3>
+            <p>未登录可看示例 Todo（只读），点击编辑/新增时弹登录。更“作品集式”展示。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">登录流程（手机号 + 验证码）</div>
+        <div class="flow">
+          <div class="node">输入手机号</div>
+          <div class="arrow">→</div>
+          <div class="node">发送验证码</div>
+          <div class="arrow">→</div>
+          <div class="node">输入验证码</div>
+          <div class="arrow">→</div>
+          <div class="node">登录成功（拿到 userId）</div>
+        </div>
+        <p class="subtitle" style="margin-top:10px">
+          说明：发送短信这一步必须依赖第三方（Firebase/Supabase/Twilio 等），否则无法“真验证码”。我们会封装成统一接口，保证 UI 不变、未来可替换供应商。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">云端方案（后端）</div>
+    <div class="mockup-body">
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>方案 1（推荐）：Supabase</h4>
+          <ul>
+            <li>Auth：支持手机号 OTP（一般需要配置短信通道，如 Twilio）</li>
+            <li>数据：Postgres + Row Level Security（按 userId 隔离）</li>
+            <li>前端：直接用 supabase-js，几乎不写后端代码</li>
+            <li>部署：前端仍用 GitHub Pages；云端在 Supabase</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>方案 2：Firebase</h4>
+          <ul>
+            <li>Auth：手机号登录成熟（短信成本/风控也要配置）</li>
+            <li>数据：Firestore（按 uid 隔离）</li>
+            <li>优点：上手快；缺点：数据模型/查询方式不同、迁移成本略高</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">数据流（建议）</div>
+        <div class="flow">
+          <div class="node">GitHub Pages（React）</div>
+          <div class="arrow">↔</div>
+          <div class="node">Auth（手机号 OTP）</div>
+          <div class="arrow">↔</div>
+          <div class="node">DB（按 userId 隔离 Todo）</div>
+        </div>
+        <p class="subtitle" style="margin-top:10px">本地 localStorage 可以保留作为离线缓存，但最终以云端为准（登录后自动同步）。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">请你先确认两个选择（决定我后面的实现方式）</div>
+  <div class="options">
+    <div class="option" data-choice="entry-a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>入口：进入即登录</h3>
+        <p>最清晰、最像“个人工具”。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="entry-b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>入口：可浏览，编辑需登录</h3>
+        <p>更像作品展示，朋友点开也能先看。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="backend-supabase" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>云端：Supabase（推荐）</h3>
+        <p>最少后端代码，RLS 天然做隔离。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="backend-firebase" onclick="toggleSelect(this)">
+      <div class="letter">D</div>
+      <div class="content">
+        <h3>云端：Firebase</h3>
+        <p>手机号登录成熟，Firestore 存 Todo。</p>
+      </div>
+    </div>
+  </div>
+  <p class="subtitle" style="margin-top:12px">
+    你点完后在聊天里告诉我：选了 A/B + C/D（或直接说“按推荐”：A + C）。
+  </p>
+</div>

@@ -1,6 +1,13 @@
 import { HashRouter, Route, Routes } from "react-router-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./global.css";
+import { LoginModal } from "./auth/LoginModal";
+import { useSession } from "./auth/useSession";
+import { supabase } from "./auth/supabaseClient";
+import { Toast } from "./ui/Toast";
+import { useToast } from "./ui/useToast";
+import { bulkInsertTodos, createTodo, deleteTodo, listTodos, reorderTodos, updateTodo } from "./data/cloudTodoStore";
+import { normalizeLocalTodosForImport } from "./data/importLocalTodos";
 
 type Filter = "all" | "active" | "done" | "today";
 
@@ -244,6 +251,12 @@ function Home() {
   const [filter, setFilter] = useState<Filter>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"day" | "night">(() => getInitialTheme());
+  const [loginOpen, setLoginOpen] = useState(false);
+
+  const { user, enabled: authEnabled } = useSession();
+  const { items: toasts, push: pushToast, remove: removeToast } = useToast();
+  const cloudActive = Boolean(authEnabled && user);
+  const writeLocked = Boolean(authEnabled && !user);
 
   const [titleDraft, setTitleDraft] = useState("");
   const [ownerDraft, setOwnerDraft] = useState("");
@@ -267,6 +280,7 @@ function Home() {
   const lastCloudClickAtRef = useRef(0);
   const lastCloudClickIdRef = useRef<string | null>(null);
   const stormActiveCloudRef = useRef<HTMLButtonElement | null>(null);
+  const importPromptedRef = useRef(false);
 
   const activeCount = useMemo(() => todos.filter((todo) => !todo.done).length, [todos]);
   const progressPercent = useMemo(() => {
@@ -300,6 +314,67 @@ function Home() {
       void error;
     }
   }, [todos]);
+
+  useEffect(() => {
+    if (!cloudActive) {
+      importPromptedRef.current = false;
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        const cloudTodos = await listTodos();
+        if (!alive) {
+          return;
+        }
+
+        const mapped = cloudTodos.map((t) => ({
+          id: t.id,
+          title: t.title,
+          owner: t.owner,
+          dueDate: t.dueDate,
+          notes: t.notes,
+          done: t.done,
+        }));
+        setTodos(mapped);
+
+        if (cloudTodos.length === 0 && !importPromptedRef.current) {
+          importPromptedRef.current = true;
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (Array.isArray(parsed) && parsed.length) {
+            const shouldImport = window.confirm("云端清单为空，是否将本机清单导入云端？");
+            if (shouldImport) {
+              const rows = normalizeLocalTodosForImport(parsed);
+              await bulkInsertTodos(rows);
+              const refreshed = await listTodos();
+              if (!alive) {
+                return;
+              }
+              setTodos(
+                refreshed.map((t) => ({
+                  id: t.id,
+                  title: t.title,
+                  owner: t.owner,
+                  dueDate: t.dueDate,
+                  notes: t.notes,
+                  done: t.done,
+                })),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "云端同步失败";
+        pushToast(message);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [cloudActive, pushToast]);
 
   useEffect(() => {
     if (theme === "night") {
@@ -723,37 +798,119 @@ function Home() {
 
   function addTodo(event: React.FormEvent) {
     event.preventDefault();
+    if (writeLocked) {
+      setLoginOpen(true);
+      pushToast("登录后才能新增");
+      return;
+    }
+
     const title = titleDraft.trim();
     if (!title) {
       return;
     }
-    setTodos((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        title,
-        owner: ownerDraft.trim() || "自己",
-        dueDate: dueDraft || "",
-        notes: "",
-        done: false,
-      },
-    ]);
+
+    const draft = {
+      title,
+      owner: ownerDraft.trim() || "自己",
+      dueDate: dueDraft || "",
+      notes: "",
+      done: false,
+    };
+
+    if (cloudActive) {
+      const optimisticId = crypto.randomUUID();
+      setTodos((current) => [...current, { id: optimisticId, ...draft }]);
+      createTodo({ ...draft, sortIndex: todos.length })
+        .then((created) => {
+          setTodos((current) =>
+            current.map((t) =>
+              t.id === optimisticId
+                ? {
+                    id: created.id,
+                    title: created.title,
+                    owner: created.owner,
+                    dueDate: created.dueDate,
+                    notes: created.notes,
+                    done: created.done,
+                  }
+                : t,
+            ),
+          );
+        })
+        .catch((e) => {
+          const message = e instanceof Error ? e.message : "云端保存失败";
+          pushToast(message);
+          setTodos((current) => current.filter((t) => t.id !== optimisticId));
+        });
+    } else {
+      setTodos((current) => [...current, { id: crypto.randomUUID(), ...draft }]);
+    }
+
     setTitleDraft("");
     setOwnerDraft("");
     setDueDraft("");
   }
 
   function toggleDone(id: string) {
-    setTodos((current) =>
-      current.map((todo) => (todo.id === id ? { ...todo, done: !todo.done } : todo)),
-    );
+    if (writeLocked) {
+      setLoginOpen(true);
+      pushToast("登录后才能修改");
+      return;
+    }
+
+    setTodos((current) => {
+      const next = current.map((todo) => (todo.id === id ? { ...todo, done: !todo.done } : todo));
+      if (cloudActive) {
+        const todo = next.find((t) => t.id === id);
+        if (todo) {
+          updateTodo(id, { done: todo.done }).catch((e) => {
+            const message = e instanceof Error ? e.message : "云端更新失败";
+            pushToast(message);
+            listTodos()
+              .then((cloudTodos) => {
+                setTodos(
+                  cloudTodos.map((t) => ({
+                    id: t.id,
+                    title: t.title,
+                    owner: t.owner,
+                    dueDate: t.dueDate,
+                    notes: t.notes,
+                    done: t.done,
+                  })),
+                );
+              })
+              .catch(() => {});
+          });
+        }
+      }
+      return next;
+    });
   }
 
   function removeTodo(id: string) {
+    if (writeLocked) {
+      setLoginOpen(true);
+      pushToast("登录后才能删除");
+      return;
+    }
+
+    const before = todos;
     setTodos((current) => current.filter((todo) => todo.id !== id));
+    if (cloudActive) {
+      deleteTodo(id).catch((e) => {
+        const message = e instanceof Error ? e.message : "云端删除失败";
+        pushToast(message);
+        setTodos(before);
+      });
+    }
   }
 
   function setTodoField(id: string, patch: Partial<Todo>) {
+    if (writeLocked) {
+      setLoginOpen(true);
+      pushToast("登录后才能编辑");
+      return;
+    }
     setTodos((current) => current.map((todo) => (todo.id === id ? { ...todo, ...patch } : todo)));
   }
 
@@ -762,6 +919,12 @@ function Home() {
   }
 
   function onDrop(overId: string) {
+    if (writeLocked) {
+      setLoginOpen(true);
+      pushToast("登录后才能排序");
+      dragIdRef.current = null;
+      return;
+    }
     const draggedId = dragIdRef.current;
     dragIdRef.current = null;
     if (!draggedId || draggedId === overId) {
@@ -776,6 +939,26 @@ function Home() {
       }
       const [item] = next.splice(from, 1);
       next.splice(to, 0, item);
+      if (cloudActive) {
+        reorderTodos(next.map((t) => t.id)).catch((e) => {
+          const message = e instanceof Error ? e.message : "云端排序失败";
+          pushToast(message);
+          listTodos()
+            .then((cloudTodos) => {
+              setTodos(
+                cloudTodos.map((t) => ({
+                  id: t.id,
+                  title: t.title,
+                  owner: t.owner,
+                  dueDate: t.dueDate,
+                  notes: t.notes,
+                  done: t.done,
+                })),
+              );
+            })
+            .catch(() => {});
+        });
+      }
       return next;
     });
   }
@@ -788,6 +971,31 @@ function Home() {
     void button.offsetWidth;
     button.classList.add("is-firing");
     starfieldRef.current?.spawnPersistentShootingStar?.();
+  }
+
+  function maskPhone(value: string) {
+    const v = value.trim();
+    if (!v) {
+      return "已登录";
+    }
+    if (v.length <= 6) {
+      return v;
+    }
+    return `${v.slice(0, 3)}****${v.slice(-3)}`;
+  }
+
+  async function signOut() {
+    if (!supabase) {
+      return;
+    }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "退出失败";
+      pushToast(message);
+    }
+    setEditingId(null);
+    setTodos(loadTodos());
   }
 
   return (
@@ -847,6 +1055,21 @@ function Home() {
           夜
         </button>
       </div>
+
+      <button
+        type="button"
+        className="checkpoint"
+        style={{ position: "fixed", top: 14, left: 16, zIndex: 5, pointerEvents: "auto" }}
+        onClick={() => {
+          if (cloudActive) {
+            void signOut();
+            return;
+          }
+          setLoginOpen(true);
+        }}
+      >
+        {cloudActive ? maskPhone(user?.phone ?? "") : "登录"}
+      </button>
 
       <button
         ref={meteorLeftRef}
@@ -1022,7 +1245,44 @@ function Home() {
                         <button
                           className="item-edit-button"
                           type="button"
-                          onClick={() => setEditingId((current) => (current === todo.id ? null : todo.id))}
+                          onClick={() => {
+                            if (writeLocked) {
+                              setLoginOpen(true);
+                              pushToast("登录后才能编辑");
+                              return;
+                            }
+
+                            setEditingId((current) => {
+                              const next = current === todo.id ? null : todo.id;
+                              if (current === todo.id && cloudActive) {
+                                updateTodo(todo.id, {
+                                  title: todo.title,
+                                  owner: todo.owner,
+                                  dueDate: todo.dueDate,
+                                  notes: todo.notes,
+                                  done: todo.done,
+                                }).catch((e) => {
+                                  const message = e instanceof Error ? e.message : "云端更新失败";
+                                  pushToast(message);
+                                  listTodos()
+                                    .then((cloudTodos) => {
+                                      setTodos(
+                                        cloudTodos.map((t) => ({
+                                          id: t.id,
+                                          title: t.title,
+                                          owner: t.owner,
+                                          dueDate: t.dueDate,
+                                          notes: t.notes,
+                                          done: t.done,
+                                        })),
+                                      );
+                                    })
+                                    .catch(() => {});
+                                });
+                              }
+                              return next;
+                            });
+                          }}
                         >
                           {isEditing ? "完成" : "编辑"}
                         </button>
@@ -1102,6 +1362,15 @@ function Home() {
           </form>
         </section>
       </main>
+
+      {loginOpen ? (
+        <LoginModal
+          onClose={() => setLoginOpen(false)}
+          onLoggedIn={() => pushToast("登录成功")}
+          onToast={pushToast}
+        />
+      ) : null}
+      <Toast items={toasts} onRemove={removeToast} />
     </div>
   );
 }
