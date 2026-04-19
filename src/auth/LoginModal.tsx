@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { getAuthRedirectTo } from "./redirect";
 import { normalizePhone } from "./phone";
 import { supabase } from "./supabaseClient";
 
-type Step = "phone" | "otp";
+type Mode = "phone" | "email";
+type Step = "phone" | "otp" | "email";
 
 export function LoginModal({
   onClose,
@@ -13,8 +15,10 @@ export function LoginModal({
   onLoggedIn: () => void;
   onToast: (message: string) => void;
 }) {
+  const [mode, setMode] = useState<Mode>("phone");
   const [step, setStep] = useState<Step>("phone");
   const [phoneRaw, setPhoneRaw] = useState("");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -32,6 +36,34 @@ export function LoginModal({
   async function sendOtp() {
     if (!supabase) {
       onToast("云端未配置：需要 Supabase URL 和 anon key");
+      return;
+    }
+
+    if (mode === "email") {
+      const value = email.trim();
+      if (!value.includes("@")) {
+        onToast("请输入正确邮箱");
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const emailRedirectTo = getAuthRedirectTo(new URL(window.location.href));
+        const { error } = await supabase.auth.signInWithOtp({
+          email: value,
+          options: { emailRedirectTo },
+        });
+        if (error) {
+          throw error;
+        }
+        setStep("email");
+        onToast("登录链接已发送到邮箱");
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "发送失败";
+        onToast(message);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -130,7 +162,110 @@ export function LoginModal({
           </button>
         </div>
 
-        {step === "phone" ? (
+        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("phone");
+              setStep("phone");
+              setOtp("");
+              setCooldown(0);
+            }}
+            style={{
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: mode === "phone" ? "rgba(169,194,255,0.18)" : "rgba(5,6,12,0.62)",
+              color: "rgba(244,248,255,0.86)",
+              borderRadius: 999,
+              padding: "8px 10px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            手机号
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("email");
+              setStep("phone");
+              setOtp("");
+              setCooldown(0);
+            }}
+            style={{
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: mode === "email" ? "rgba(169,194,255,0.18)" : "rgba(5,6,12,0.62)",
+              color: "rgba(244,248,255,0.86)",
+              borderRadius: 999,
+              padding: "8px 10px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            邮箱
+          </button>
+        </div>
+
+        {mode === "email" ? (
+          step === "email" ? (
+            <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+              <div style={{ fontSize: 13, color: "rgba(244,248,255,0.78)" }}>
+                已发送登录链接到 <span style={{ fontWeight: 800 }}>{email.trim()}</span>，请打开邮箱点击链接完成登录。
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  height: 46,
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  background: "rgba(5,6,12,0.62)",
+                  color: "rgba(244,248,255,0.86)",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                我知道了
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontSize: 12, color: "rgba(244,248,255,0.64)" }}>邮箱</span>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  style={{
+                    height: 46,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.16)",
+                    background: "rgba(5,6,12,0.62)",
+                    color: "rgba(244,248,255,0.9)",
+                    padding: "0 12px",
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={sendOtp}
+                disabled={busy}
+                style={{
+                  height: 46,
+                  borderRadius: 14,
+                  border: 0,
+                  background: "linear-gradient(180deg, rgba(169,194,255,0.92), rgba(79,110,232,0.98))",
+                  color: "rgba(7,10,14,0.96)",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                发送登录链接
+              </button>
+            </div>
+          )
+        ) : step === "phone" ? (
           <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: 12, color: "rgba(244,248,255,0.64)" }}>手机号</span>
