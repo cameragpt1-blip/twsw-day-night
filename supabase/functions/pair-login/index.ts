@@ -40,7 +40,7 @@ function addMinutesIso(minutes: number) {
 }
 
 const SUPABASE_URL = getEnv("SUPABASE_URL");
-const SERVICE_ROLE = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+const SERVICE_ROLE = getEnv("SERVICE_ROLE_KEY");
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -169,4 +169,3 @@ Deno.serve(async (req) => {
 
   return json({ error: "Unknown action" }, { status: 400 });
 });
-
