@@ -1,5 +1,7 @@
 :root {
   color-scheme: light;
+  --starfield-image: url("/assets/starfield-blue.png");
+  --moon-image: url("/assets/moon-blue.png");
   --bg: #f1eee8;
   --bg-secondary: #ebe7de;
   --paper: #faf8f3;
@@ -179,13 +181,13 @@ html[data-theme="night"][data-night-preset="B"] body {
   --primary-fg: rgba(7, 10, 14, 0.96);
   --primary-shadow: 0 16px 40px rgba(0, 0, 0, 0.52);
   --shadow: 0 22px 72px rgba(0, 0, 0, 0.58);
-  --page-bg: #040615 url("/assets/starfield-blue.png") center / cover no-repeat;
+  --page-bg: #040615 var(--starfield-image) center / cover no-repeat;
   animation: none;
 }
 
 html[data-theme="night"][data-night-preset="B"] #appRoot {
   min-height: 100vh;
-  background: #040615 url("/assets/starfield-blue.png") center / cover no-repeat;
+  background: #040615 var(--starfield-image) center / cover no-repeat;
 }
 
 html[data-theme="night"][data-night-preset="B"] .ambient-a,
@@ -606,7 +608,7 @@ html[data-theme="night"] .star-canvas-layer {
 
 html[data-theme="night"][data-night-preset="B"] .moon-layer {
   opacity: 1;
-  background-image: url("/assets/moon-blue.png");
+  background-image: var(--moon-image);
   transform: translate3d(0, 0, 0) scale(1.02);
   filter:
     drop-shadow(0 0 32px rgba(255, 244, 220, 0.9))

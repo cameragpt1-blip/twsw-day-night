@@ -52,11 +52,11 @@ const STORAGE_KEY = "personal-command-desk-todos";
 const THEME_STORAGE_KEY = "personal-command-desk-theme";
 
 const CLOUDS: Array<{ id: string; className: string; src: string }> = [
-  { id: "a", className: "cloud cloud-a", src: "/assets/clouds/云1.png" },
-  { id: "b", className: "cloud cloud-b", src: "/assets/clouds/云2.png" },
-  { id: "c", className: "cloud cloud-c", src: "/assets/clouds/云3.png" },
-  { id: "d", className: "cloud cloud-d", src: "/assets/clouds/云4.png" },
-  { id: "e", className: "cloud cloud-e", src: "/assets/clouds/云5.png" },
+  { id: "a", className: "cloud cloud-a", src: "assets/clouds/云1.png" },
+  { id: "b", className: "cloud cloud-b", src: "assets/clouds/云2.png" },
+  { id: "c", className: "cloud cloud-c", src: "assets/clouds/云3.png" },
+  { id: "d", className: "cloud cloud-d", src: "assets/clouds/云4.png" },
+  { id: "e", className: "cloud cloud-e", src: "assets/clouds/云5.png" },
 ];
 
 function nowMs() {
@@ -73,6 +73,11 @@ function getGsap() {
     return null;
   }
   return gsap as Gsap;
+}
+
+function withBase(pathname: string) {
+  const base = import.meta.env.BASE_URL;
+  return `${base}${pathname.replace(/^\//, "")}`;
 }
 
 function startOfDay(date: Date) {
@@ -315,6 +320,14 @@ function Home() {
     if (preset) {
       document.documentElement.dataset.nightPreset = preset;
     }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--starfield-image",
+      `url("${withBase("assets/starfield-blue.png")}")`,
+    );
+    document.documentElement.style.setProperty("--moon-image", `url("${withBase("assets/moon-blue.png")}")`);
   }, []);
 
   useEffect(() => {
@@ -807,7 +820,7 @@ function Home() {
             }}
           >
             <span className="cloud-shadow"></span>
-            <img className="cloud-art" src={cloud.src} alt="" />
+            <img className="cloud-art" src={withBase(cloud.src)} alt="" />
           </button>
         ))}
         <div className="rain-layer" id="rainLayer" ref={rainDropsLayerRef}></div>
