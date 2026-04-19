@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:overwrite-register": "node scripts/overwrite-register-smoke.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
