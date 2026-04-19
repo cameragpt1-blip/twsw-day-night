@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthRedirectTo } from "./redirect";
 import { normalizePhone } from "./phone";
+import { consumePairing, startPairing } from "./pairLoginClient";
 import { supabase } from "./supabaseClient";
 
 type Mode = "phone" | "email";
@@ -22,6 +23,9 @@ export function LoginModal({
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [pairCode, setPairCode] = useState("");
+  const [pairExpiresAt, setPairExpiresAt] = useState("");
+  const pollingRef = useRef<number | null>(null);
 
   const phone = useMemo(() => normalizePhone(phoneRaw), [phoneRaw]);
 
@@ -32,6 +36,15 @@ export function LoginModal({
     const timer = window.setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [cooldown]);
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
 
   async function sendOtp() {
     if (!supabase) {
@@ -48,7 +61,7 @@ export function LoginModal({
 
       setBusy(true);
       try {
-        const emailRedirectTo = getAuthRedirectTo(new URL(window.location.href));
+        const emailRedirectTo = getAuthRedirectTo(new URL(window.location.href), "/pair");
         const { error } = await supabase.auth.signInWithOtp({
           email: value,
           options: { emailRedirectTo },
@@ -113,6 +126,102 @@ export function LoginModal({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function beginPairing() {
+    if (!supabase) {
+      onToast("云端未配置：需要 Supabase URL 和 anon key");
+      return;
+    }
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setBusy(true);
+    try {
+      const res = await startPairing();
+      setPairCode(res.code);
+      setPairExpiresAt(res.expiresAt);
+      onToast("配对码已生成");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "生成失败";
+      onToast(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function tryConsumePairing() {
+    if (!supabase) {
+      onToast("云端未配置：需要 Supabase URL 和 anon key");
+      return;
+    }
+    const code = pairCode.trim();
+    if (!code) {
+      onToast("请先生成配对码");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await consumePairing(code);
+      if (res.status !== "ready") {
+        onToast("还未完成配对，请在手机输入配对码后再试");
+        return;
+      }
+      const { error } = await supabase.auth.setSession({
+        access_token: res.accessToken,
+        refresh_token: res.refreshToken,
+      });
+      if (error) {
+        throw error;
+      }
+      onLoggedIn();
+      onClose();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "配对失败";
+      onToast(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startPolling() {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    pollingRef.current = window.setInterval(() => {
+      void (async () => {
+        if (!supabase) {
+          return;
+        }
+        const code = pairCode.trim();
+        if (!code) {
+          return;
+        }
+        try {
+          const res = await consumePairing(code);
+          if (res.status !== "ready") {
+            return;
+          }
+          const { error } = await supabase.auth.setSession({
+            access_token: res.accessToken,
+            refresh_token: res.refreshToken,
+          });
+          if (error) {
+            return;
+          }
+          if (pollingRef.current) {
+            window.clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          onLoggedIn();
+          onClose();
+        } catch {
+          return;
+        }
+      })();
+    }, 1500);
   }
 
   return (
@@ -210,6 +319,84 @@ export function LoginModal({
             <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
               <div style={{ fontSize: 13, color: "rgba(244,248,255,0.78)" }}>
                 已发送登录链接到 <span style={{ fontWeight: 800 }}>{email.trim()}</span>，请打开邮箱点击链接完成登录。
+              </div>
+              <div
+                style={{
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  background: "rgba(5,6,12,0.62)",
+                  borderRadius: 16,
+                  padding: 12,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontSize: 12, color: "rgba(244,248,255,0.64)", letterSpacing: "0.08em" }}>
+                  跨设备登录（手机邮箱 → 电脑网页）
+                </div>
+                <div style={{ fontSize: 13, color: "rgba(244,248,255,0.78)" }}>
+                  如果你在手机邮箱点击了链接：手机会打开 <span style={{ fontWeight: 800 }}>配对页</span>，在手机输入电脑上的配对码即可让电脑登录。
+                </div>
+                {pairCode ? (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.12em" }}>{pairCode}</div>
+                      <div style={{ fontSize: 12, color: "rgba(244,248,255,0.6)" }}>
+                        {pairExpiresAt ? `有效期至 ${new Date(pairExpiresAt).toLocaleTimeString()}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <button
+                        type="button"
+                        onClick={tryConsumePairing}
+                        disabled={busy}
+                        style={{
+                          height: 46,
+                          borderRadius: 14,
+                          border: 0,
+                          background: "linear-gradient(180deg, rgba(169,194,255,0.92), rgba(79,110,232,0.98))",
+                          color: "rgba(7,10,14,0.96)",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        我已在手机完成
+                      </button>
+                      <button
+                        type="button"
+                        onClick={startPolling}
+                        disabled={busy}
+                        style={{
+                          height: 46,
+                          borderRadius: 14,
+                          border: "1px solid rgba(255,255,255,0.16)",
+                          background: "rgba(5,6,12,0.62)",
+                          color: "rgba(244,248,255,0.86)",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        自动检测
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={beginPairing}
+                    disabled={busy}
+                    style={{
+                      height: 46,
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: "rgba(5,6,12,0.62)",
+                      color: "rgba(244,248,255,0.86)",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    生成电脑配对码
+                  </button>
+                )}
               </div>
               <button
                 type="button"

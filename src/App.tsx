@@ -1,9 +1,10 @@
-import { HashRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes, useNavigate } from "react-router-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./global.css";
 import { LoginModal } from "./auth/LoginModal";
 import { useSession } from "./auth/useSession";
 import { supabase } from "./auth/supabaseClient";
+import { submitPairing } from "./auth/pairLoginClient";
 import { Toast } from "./ui/Toast";
 import { useToast } from "./ui/useToast";
 import { bulkInsertTodos, createTodo, deleteTodo, listTodos, reorderTodos, updateTodo } from "./data/cloudTodoStore";
@@ -246,17 +247,21 @@ function getInitialTheme() {
   return "day";
 }
 
-function Home() {
+function Home({ screen }: { screen?: "main" | "pair" }) {
+  const navigate = useNavigate();
   const [todos, setTodos] = useState<Todo[]>(() => loadTodos());
   const [filter, setFilter] = useState<Filter>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"day" | "night">(() => getInitialTheme());
   const [loginOpen, setLoginOpen] = useState(false);
+  const [pairCodeInput, setPairCodeInput] = useState("");
+  const [pairBusy, setPairBusy] = useState(false);
 
   const { user, enabled: authEnabled } = useSession();
   const { items: toasts, push: pushToast, remove: removeToast } = useToast();
   const cloudActive = Boolean(authEnabled && user);
   const writeLocked = Boolean(authEnabled && !user);
+  const activeScreen = screen ?? "main";
 
   const [titleDraft, setTitleDraft] = useState("");
   const [ownerDraft, setOwnerDraft] = useState("");
@@ -1363,6 +1368,136 @@ function Home() {
         </section>
       </main>
 
+      {activeScreen === "pair" ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 55,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(0,0,0,0.46)",
+            padding: 18,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              navigate("/");
+            }
+          }}
+        >
+          <div
+            style={{
+              width: "min(560px, 100%)",
+              borderRadius: 22,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(10,12,20,0.86)",
+              padding: 16,
+              boxShadow: "0 22px 72px rgba(0,0,0,0.58)",
+              color: "rgba(244,248,255,0.9)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", fontSize: 12 }}>
+                电脑登录配对
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "rgba(244,248,255,0.72)",
+                  cursor: "pointer",
+                }}
+              >
+                关闭
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 13, color: "rgba(244,248,255,0.78)" }}>
+              在电脑网页生成配对码后，把配对码输入到这里并确认。确认后电脑会自动变为已登录状态。
+            </div>
+
+            {!cloudActive ? (
+              <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 13, color: "rgba(244,248,255,0.78)" }}>当前还没登录，请先用邮箱登录。</div>
+                <button
+                  type="button"
+                  onClick={() => setLoginOpen(true)}
+                  style={{
+                    height: 46,
+                    borderRadius: 14,
+                    border: 0,
+                    background: "linear-gradient(180deg, rgba(169,194,255,0.92), rgba(79,110,232,0.98))",
+                    color: "rgba(7,10,14,0.96)",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  打开登录
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span style={{ fontSize: 12, color: "rgba(244,248,255,0.64)" }}>配对码</span>
+                  <input
+                    value={pairCodeInput}
+                    onChange={(e) => setPairCodeInput(e.target.value)}
+                    placeholder="例如 123456"
+                    inputMode="text"
+                    style={{
+                      height: 46,
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: "rgba(5,6,12,0.62)",
+                      color: "rgba(244,248,255,0.9)",
+                      padding: "0 12px",
+                      letterSpacing: "0.12em",
+                      fontWeight: 800,
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={pairBusy}
+                  onClick={() => {
+                    if (!pairCodeInput.trim()) {
+                      pushToast("请输入配对码");
+                      return;
+                    }
+                    setPairBusy(true);
+                    submitPairing(pairCodeInput)
+                      .then(() => {
+                        pushToast("已完成配对，可以回到电脑");
+                        navigate("/");
+                      })
+                      .catch((e) => {
+                        const message = e instanceof Error ? e.message : "配对失败";
+                        pushToast(message);
+                      })
+                      .finally(() => setPairBusy(false));
+                  }}
+                  style={{
+                    height: 46,
+                    borderRadius: 14,
+                    border: 0,
+                    background: "linear-gradient(180deg, rgba(169,194,255,0.92), rgba(79,110,232,0.98))",
+                    color: "rgba(7,10,14,0.96)",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  确认并完成配对
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {loginOpen ? (
         <LoginModal
           onClose={() => setLoginOpen(false)}
@@ -1379,7 +1514,8 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Home screen="main" />} />
+        <Route path="/pair" element={<Home screen="pair" />} />
       </Routes>
     </HashRouter>
   );

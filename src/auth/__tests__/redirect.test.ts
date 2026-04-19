@@ -6,5 +6,9 @@ describe("getAuthRedirectTo", () => {
     const url = new URL("https://cameragpt1-blip.github.io/twsw-day-night/#/?x=1");
     expect(getAuthRedirectTo(url)).toBe("https://cameragpt1-blip.github.io/twsw-day-night/");
   });
-});
 
+  it("can append hash route path", () => {
+    const url = new URL("https://cameragpt1-blip.github.io/twsw-day-night/#/?x=1");
+    expect(getAuthRedirectTo(url, "/pair")).toBe("https://cameragpt1-blip.github.io/twsw-day-night/#/pair");
+  });
+});
