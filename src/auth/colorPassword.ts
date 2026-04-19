@@ -5,17 +5,18 @@ export function isColorId(value: string): value is ColorId {
 }
 
 export function colorIdsToPassword(a: ColorId, b: ColorId) {
-  return [a, b].sort().join("-");
+  const [first, second] = [a, b].sort();
+  return `TWSW-${first}-${second}`;
 }
 
 export function nextSelectedColors(current: ColorId[], next: ColorId): ColorId[] {
   if (current.includes(next)) {
-    return current;
+    return current.filter((id) => id !== next);
   }
   if (current.length < 2) {
     return [...current, next];
   }
-  return [current[1], next];
+  return current;
 }
 
 export const COLOR_CARDS: Array<{ id: ColorId; hex: string; label: string }> = [

@@ -125,14 +125,23 @@ export function LoginModal({
                     role="listitem"
                     className={`auth-color ${isSelected ? "is-selected" : ""}`}
                     onClick={() => {
-                      setSelected((current) => nextSelectedColors(current, card.id));
+                      setSelected((current) => {
+                        if (!current.includes(card.id) && current.length >= 2) {
+                          onToast("最多选择 2 个色卡");
+                          return current;
+                        }
+                        return nextSelectedColors(current, card.id);
+                      });
                       if (inlineError) {
                         setInlineError(null);
                       }
                     }}
                     aria-pressed={isSelected}
                   >
-                    <span className="auth-color-swatch" style={{ background: card.hex }} aria-hidden="true"></span>
+                    <div className="auth-color-head">
+                      <span className="auth-color-swatch" style={{ background: card.hex }} aria-hidden="true"></span>
+                      <span className={`auth-color-check ${isSelected ? "is-on" : ""}`} aria-hidden="true"></span>
+                    </div>
                     <span className="auth-color-label">{card.label}</span>
                   </button>
                 );

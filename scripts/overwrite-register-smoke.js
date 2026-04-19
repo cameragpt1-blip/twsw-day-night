@@ -35,7 +35,7 @@ function normalizeColorId(value) {
 }
 
 function buildPassword(colorA, colorB) {
-  return [colorA, colorB].sort().join("-");
+  return `TWSW-${[colorA, colorB].sort().join("-")}`;
 }
 
 async function callOverwriteRegister({ supabaseUrl, anonKey, email, password }) {
@@ -124,4 +124,3 @@ main().catch((e) => {
   console.error(e);
   process.exitCode = 1;
 });
-

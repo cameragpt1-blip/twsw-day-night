@@ -32,7 +32,7 @@ function isBytedanceEmail(email: string) {
 }
 
 function isColorPassword(password: string) {
-  return /^C[1-9]-C[1-9]$/.test(password);
+  return /^TWSW-C[1-9]-C[1-9]$/.test(password);
 }
 
 const SUPABASE_URL = getEnv("SUPABASE_URL");

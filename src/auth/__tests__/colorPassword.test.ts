@@ -9,13 +9,14 @@ describe("color password", () => {
   });
 
   it("is order-insensitive and stable", () => {
-    expect(colorIdsToPassword("C2", "C8")).toBe("C2-C8");
-    expect(colorIdsToPassword("C8", "C2")).toBe("C2-C8");
+    expect(colorIdsToPassword("C2", "C8")).toBe("TWSW-C2-C8");
+    expect(colorIdsToPassword("C8", "C2")).toBe("TWSW-C2-C8");
   });
 
-  it("replaces the oldest selection when selecting a third color", () => {
+  it("toggles selection and prevents selecting more than 2", () => {
     expect(nextSelectedColors([], "C1")).toEqual(["C1"]);
     expect(nextSelectedColors(["C1"], "C2")).toEqual(["C1", "C2"]);
-    expect(nextSelectedColors(["C1", "C2"], "C3")).toEqual(["C2", "C3"]);
+    expect(nextSelectedColors(["C1", "C2"], "C3")).toEqual(["C1", "C2"]);
+    expect(nextSelectedColors(["C1", "C2"], "C2")).toEqual(["C1"]);
   });
 });

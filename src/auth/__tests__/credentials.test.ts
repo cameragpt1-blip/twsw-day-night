@@ -11,8 +11,7 @@ describe("buildBytedanceCredentials", () => {
     expect(buildBytedanceCredentials("zhangsan", ["C8", "C2"])).toEqual({
       ok: true,
       email: "zhangsan@bytedance.com",
-      password: "C2-C8",
+      password: "TWSW-C2-C8",
     });
   });
 });
-
