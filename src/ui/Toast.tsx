@@ -6,7 +6,7 @@ export function Toast({ items, onRemove }: { items: ToastItem[]; onRemove: (id: 
   }
 
   return (
-    <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 50, display: "grid", gap: 10 }}>
+    <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 80, display: "grid", gap: 10 }}>
       {items.map((t) => (
         <button
           key={t.id}
@@ -29,4 +29,3 @@ export function Toast({ items, onRemove }: { items: ToastItem[]; onRemove: (id: 
     </div>
   );
 }
-
