@@ -1,9 +1,7 @@
 import { HashRouter, Route, Routes } from "react-router-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./global.css";
-import { LoginModal } from "./auth/LoginModal";
 import { useSession } from "./auth/useSession";
-import { supabase } from "./auth/supabaseClient";
 import { Toast } from "./ui/Toast";
 import { useToast } from "./ui/useToast";
 import { bulkInsertTodos, createTodo, deleteTodo, listTodos, reorderTodos, updateTodo } from "./data/cloudTodoStore";
@@ -251,12 +249,10 @@ function Home() {
   const [filter, setFilter] = useState<Filter>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"day" | "night">(() => getInitialTheme());
-  const [loginOpen, setLoginOpen] = useState(false);
 
   const { user, enabled: authEnabled } = useSession();
   const { items: toasts, push: pushToast, remove: removeToast } = useToast();
   const cloudActive = Boolean(authEnabled && user);
-  const writeLocked = Boolean(authEnabled && !user);
 
   const [titleDraft, setTitleDraft] = useState("");
   const [ownerDraft, setOwnerDraft] = useState("");
@@ -798,12 +794,6 @@ function Home() {
 
   function addTodo(event: React.FormEvent) {
     event.preventDefault();
-    if (writeLocked) {
-      setLoginOpen(true);
-      pushToast("登录后才能新增");
-      return;
-    }
-
     const title = titleDraft.trim();
     if (!title) {
       return;
@@ -852,12 +842,6 @@ function Home() {
   }
 
   function toggleDone(id: string) {
-    if (writeLocked) {
-      setLoginOpen(true);
-      pushToast("登录后才能修改");
-      return;
-    }
-
     setTodos((current) => {
       const next = current.map((todo) => (todo.id === id ? { ...todo, done: !todo.done } : todo));
       if (cloudActive) {
@@ -888,12 +872,6 @@ function Home() {
   }
 
   function removeTodo(id: string) {
-    if (writeLocked) {
-      setLoginOpen(true);
-      pushToast("登录后才能删除");
-      return;
-    }
-
     const before = todos;
     setTodos((current) => current.filter((todo) => todo.id !== id));
     if (cloudActive) {
@@ -906,11 +884,6 @@ function Home() {
   }
 
   function setTodoField(id: string, patch: Partial<Todo>) {
-    if (writeLocked) {
-      setLoginOpen(true);
-      pushToast("登录后才能编辑");
-      return;
-    }
     setTodos((current) => current.map((todo) => (todo.id === id ? { ...todo, ...patch } : todo)));
   }
 
@@ -919,12 +892,6 @@ function Home() {
   }
 
   function onDrop(overId: string) {
-    if (writeLocked) {
-      setLoginOpen(true);
-      pushToast("登录后才能排序");
-      dragIdRef.current = null;
-      return;
-    }
     const draggedId = dragIdRef.current;
     dragIdRef.current = null;
     if (!draggedId || draggedId === overId) {
@@ -971,31 +938,6 @@ function Home() {
     void button.offsetWidth;
     button.classList.add("is-firing");
     starfieldRef.current?.spawnPersistentShootingStar?.();
-  }
-
-  function maskPhone(value: string) {
-    const v = value.trim();
-    if (!v) {
-      return "已登录";
-    }
-    if (v.length <= 6) {
-      return v;
-    }
-    return `${v.slice(0, 3)}****${v.slice(-3)}`;
-  }
-
-  async function signOut() {
-    if (!supabase) {
-      return;
-    }
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "退出失败";
-      pushToast(message);
-    }
-    setEditingId(null);
-    setTodos(loadTodos());
   }
 
   return (
@@ -1055,21 +997,6 @@ function Home() {
           夜
         </button>
       </div>
-
-      <button
-        type="button"
-        className="checkpoint"
-        style={{ position: "fixed", top: 14, left: 16, zIndex: 5, pointerEvents: "auto" }}
-        onClick={() => {
-          if (cloudActive) {
-            void signOut();
-            return;
-          }
-          setLoginOpen(true);
-        }}
-      >
-        {cloudActive ? maskPhone(user?.phone ?? "") : "登录"}
-      </button>
 
       <button
         ref={meteorLeftRef}
@@ -1246,12 +1173,6 @@ function Home() {
                           className="item-edit-button"
                           type="button"
                           onClick={() => {
-                            if (writeLocked) {
-                              setLoginOpen(true);
-                              pushToast("登录后才能编辑");
-                              return;
-                            }
-
                             setEditingId((current) => {
                               const next = current === todo.id ? null : todo.id;
                               if (current === todo.id && cloudActive) {
@@ -1363,13 +1284,6 @@ function Home() {
         </section>
       </main>
 
-      {loginOpen ? (
-        <LoginModal
-          onClose={() => setLoginOpen(false)}
-          onLoggedIn={() => pushToast("登录成功")}
-          onToast={pushToast}
-        />
-      ) : null}
       <Toast items={toasts} onRemove={removeToast} />
     </div>
   );
